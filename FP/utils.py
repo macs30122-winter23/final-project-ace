@@ -386,6 +386,13 @@ class SearchEngine(object):
         df.to_csv(self.path, mode='a', header=not os.path.exists(self.path), index=False)
         print(f'Saved to {self.path}', flush=True)
 
+    def remove_dupna(self):
+        '''
+        remove the duplicate and na rows in the csv file
+        '''
+        pd.read_csv(self.path).drop_duplicates().dropna().to_csv(self.path, index=False)
+        print(f'Removed duplicate and na rows from {self.path}', flush=True)
+
     def go(self):
         '''
         the main function to run the whole process to get the news of the keyword from the media
@@ -429,6 +436,7 @@ class SearchEngine(object):
                 self.keyword = self.kw[self.name].join(keyword.split())
                 self.init()
                 self.go()
+                self.remove_dupna()
                 print(f'{self.keyword} done', flush=True)
                 print('\n', flush=True)
 
