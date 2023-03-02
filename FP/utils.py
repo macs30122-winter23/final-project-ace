@@ -1,12 +1,11 @@
 from time import sleep
 import datetime as dt
-from newspaper import *
+from newspaper import Article
 import requests
 from bs4 import BeautifulSoup
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np
 from selenium import webdriver
 from nltk.corpus import stopwords
 from http.cookiejar import CookieJar as cj
@@ -20,8 +19,8 @@ import json
 
 class SearchEngine(object):
     def __init__(self,
-                 name,
-                 keyword,
+                 name='CNN',
+                 keyword='US',
                  startpage=1,
                  endpage=2,
                  sleep1=0.5,
@@ -35,6 +34,54 @@ class SearchEngine(object):
                  limit1=10,
                  limit2=10,
                  limit3=1000,):
+        '''
+        This class is responsible for getting news urls, parsing them, and saving them
+         from different news websites and keywords.
+
+        Parameters
+        ----------
+        name: str, name of the news website
+        keyword: str, keyword to search
+        startpage: int, the start page of the search
+        endpage: int, the end page of the search
+        sleep1: float, time interval to revisit the page if failed
+        sleep2: float, time interval to visit the next page if current page is empty
+        sleep3: float, time interval to reparse the page if failed
+        limit1: int, number of times to revisit the page if failed, then skip the page
+        limit2: int, number of times to visit next page if current page is empty, then end the crawler
+        limit3: int, total number of times to reparse the page if failed, then end the crawler
+        filter_: dict, time filter for the news
+        process: bool, whether to get the urls in debug
+        parse: bool, whether to parse the urls in debug
+        save: bool, whether to save the news in debug
+        root: str, root directory to save the news
+
+        kw: dict, method to process the keywords for different news websites
+        headers: dict, headers for the requests
+        page: int, current page
+        methods: dict, method to get the urls for different news websites
+        method: str, method to get the urls
+        info: dict, search page urls for different news websites
+        loc: dict, location of the news urls for different search pages
+        miss_domain: list, news websites that do not have the domain in the news urls
+        has_domain: bool, whether the news website has the domain in the news urls
+        easy_json: bool, whether the news website has easy json format
+        medium_json: bool, whether the news website has medium json format
+        hard_json: bool, whether the news website has hard json format
+        jsonids: dict, location of the news urls for different json formats
+        urls: list, news urls
+        domain: str, domain of the news website
+        news: list of News object
+        texts: list, texts of the news
+        titles: list, titles of the news
+        publish_dates: list, publish dates of the news
+        mem: psutil.virtual_memory(), memory usage
+        num: int, number of news
+        count: int, number of news urls parsed
+        driver: webdriver, driver for selenium
+        pre: str, location of the parent node of the news urls
+        path: str, location of the news urls to be saved
+        '''
         self.name = name
         self.kw = {'CNN': '+',
                    'foxnews': '%20',
@@ -59,11 +106,10 @@ class SearchEngine(object):
         self.page = startpage
         self.startpage = startpage
         self.endpage = endpage
-        self.manual = ['nytimes']
         self.methods = {'direct': ['time', 'spectator', 'federalist', 'nypost'],
                         'api': ['foxnews', 'CNN', 'blaze', 'dailycaller'],
                         's': ['ABC']}
-        self.method = ['direct' if self.name in self.methods['direct'] else 'api'][0]
+        self.set_method()
         if self.name in self.methods['s']:
             self.method = 's'
         self.info = None
@@ -87,7 +133,6 @@ class SearchEngine(object):
                       'foxnews': ['items'],
                       'dailycaller': ['results'],
                       'nationalreview': ['template_items', 'items']}
-        self.json = self.name in self.jsonids
         self.urls = []
         self.sleep1 = sleep1
         self.sleep2 = sleep2
@@ -119,7 +164,7 @@ class SearchEngine(object):
         # Here we do not use the filter, so we do not need to add the filter to the path, but you can add it if you want
         # self.path = self.root + f'/{self.name}_{self.keyword}_page{self.startpage}to{self.endpage}_time
         # {self.filter_["begin_time"]}to{self.filter_["end_time"]}.csv'
-        self.path = self.root + f'/{self.name}_{self.keyword}.csv'
+        self.path = self.root + f'/{self.name}/{self.name}_{self.keyword}.csv'
         if process:
             self.get_all_urls()
         if parse:
@@ -128,16 +173,34 @@ class SearchEngine(object):
             self.save()
 
     def process_filter(self):
+        '''
+        Process the time filter
+        '''
         if self.filter_['begin_time']:
             self.fifilter_['begin_time'] = dt.datetime(*self.filter_['begin_time']).strftime('%Y%m%d')
         if self.filter_['end_time']:
             self.filter_['end_time'] = dt.datetime(*self.filter_['end_time']).strftime('%Y%m%d')
         return None
 
+    def set_method(self):
+        '''
+        Set the method of getting the news urls
+        '''
+        if self.name in self.methods['direct']:
+            self.method = 'direct'
+        elif self.name in self.methods['api']:
+            self.method = 'api'
+        elif self.name in self.methods['s']:
+            self.method = 's'
+
     def get_urls(self, page):
+        '''
+        Get the news urls of a search page
+        '''
         self.page = page
         print(f'Getting page {self.page} of {self.endpage} from {self.name}...', end='\r', flush=True)
 
+        # define the url of the search page so that we can get the news urls from a specific search page
         self.info = {'time': f'https://time.com/search/?q={self.keyword}&page={self.page}',
                      'foxnews': f"https://api.foxnews.com/search/web?q={self.keyword}"
                                 f"+-filetype:amp+-filetype:xml+more:pagemap:metatags-prism.section+"
@@ -148,10 +211,6 @@ class SearchEngine(object):
                      'CNN': f'https://search.api.cnn.com/content?q={self.keyword}&size=10&from='
                             f'{10*self.page-10}&page={self.page}&sort=relevance&types=article',
                      "ABC": f'https://abcnews.go.com/search?searchtext={self.keyword}&type=Story&page={self.page}',
-                     'nytimes': f"https://www.nytimes.com/search?dropmab=false&endDate="
-                                f"{self.filter_['end_time']}&query={self.keyword}"
-                                f"&sections=Opinion%7Cnyt%3A%2F%2Fsection%2Fd7a71185-aa60-5635-bce0"
-                                f"-5fab76c7c297&sort=best&startDate={self.filter_['begin_time']}&types=article",
                      'spectator': f'https://spectator.org/page/{self.page}/?s={self.keyword}',
                      'blaze': f'https://www.theblaze.com/res/load_more_posts/data.js?site_id=19257436&node'
                               f'_id=%2Froot%2Fblocks%2Fblock%5Bsearch%5D%2Fabtests%2Fabtest%5B1%5D%2'
@@ -168,6 +227,7 @@ class SearchEngine(object):
                      'nypost': f'https://nypost.com/search/{self.keyword}/page/{self.page}/',}
         self.domain = urlparse(self.info[self.name]).netloc
 
+        # get the news urls from the search page with different methods
         if self.method == 'direct':
             soup = BeautifulSoup(requests.get(self.info[self.name], **self.headers).text, 'lxml')
             if self.name in self.pre:
@@ -197,29 +257,43 @@ class SearchEngine(object):
             if self.name in self.pre:
                 soup = soup.find('div', class_=self.pre[self.name])
             urls = [tag['href'] for tag in soup.find_all('a', class_=self.loc[self.name]) if tag.has_attr('href')]
+
+        # store the urls in a list and add the domain if needed
         try:
             return sum(self.add_domain(urls), [])
         except:
             return self.add_domain(urls)
 
     def add_domain(self, urls):
+        '''
+        add the domain to the urls if needed
+        '''
         if not self.has_domain:
             return list(map(lambda x: f'https://{self.domain}{x}', urls))
         return urls
 
     def get_json(self, string):
+        '''
+        get the json from the string
+        '''
         return json.loads(string[string.index('{'):string.rindex('}')+1])
 
     def get_dict(self, dic):
+        '''
+        get the dictionary that stores the news urls from the json
+        '''
         for i in self.jsonids[self.name]:
             dic = dic[i]
         return dic
 
-    def get_all_urls(self):
-        for i in range(self.page, self.endpage+1):
-            self.urls.extend(self.get_urls(i))
+    # def get_all_urls(self):
+    #     for i in range(self.page, self.endpage+1):
+    #         self.urls.extend(self.get_urls(i))
 
     def get_all_urls(self):
+        '''
+        get all the urls from all the search pages needed
+        '''
         urls = []
         while self.page <= self.endpage:
             try:
@@ -230,11 +304,13 @@ class SearchEngine(object):
             except:
                 sleep(self.sleep1)
                 self.count1 += 1
+                # stop when failed for too many consecutive times
                 if self.count1 >= self.limit1:
                     print(f'Getting urls No.{self.page} from {self.keyword} failed too many times!', flush=True)
                     break
                 continue
 
+            # stop when the urls are empty for too many consecutive times
             if urls == []:
                 sleep(self.sleep2)
                 self.count2 += 1
@@ -248,26 +324,30 @@ class SearchEngine(object):
         self.urls = sorted(list(set(self.urls)))
 
     def parse(self):
+        '''
+        parse the news from the urls to get the titles, texts and publish dates
+        '''
         print(f'Parsing {self.num} urls from {self.name}...', flush=True)
 
-        for url in tqdm(self.urls):
-            self.count += 1
+        for url in tqdm(self.urls, colour='green'):
             try:
                 new = News(url)
-                if new.text:
-                    self.texts.append(new.text)
-                    self.titles.append(new.title)
-                    self.publish_dates.append(new.publish_date)
+                self.count += 1
+                self.texts.append(new.text)
+                self.titles.append(new.title)
+                self.publish_dates.append(new.publish_date)
             except:
                 sleep(self.sleep3)
                 self.count3 += 1
                 print(f'Failed to parse No. {self.count} of {len(self.urls)} urls from {self.name}, '
                       f'total failed {self.count3} times.', flush=True)
+                # stop when failed for too many times
                 if self.count3 >= self.limit3:
                     print(f'Parsing {self.keyword} failed too many times!', flush=True)
                     print(f'{self.keyword} saved {self.count} results', flush=True)
                     break
 
+            # save the results every 100 urls, then clean the memory
             if self.count % 100 == 0:
                 self.save()
                 num = len(self.texts)
@@ -282,6 +362,9 @@ class SearchEngine(object):
         return None
 
     def get_system_memory(self):
+        '''
+        get the system memory usage information
+        '''
         self.mem = psutil.virtual_memory()
         print(f'Total memory: {self.mem.total/1024/1024/1024:.2f}GB, '
               f'Used memory: {self.mem.used/1024/1024/1024:.2f}GB, '
@@ -289,9 +372,12 @@ class SearchEngine(object):
               flush=True)
 
     def save(self):
+        '''
+        save the results to a csv file
+        '''
         # self.path = self.root + f'/{self.name}_{self.keyword}_page{self.startpage}to{self.endpage}' \
         #                         f'_time{self.filter_["begin_time"]}to{self.filter_["end_time"]}.csv'
-        self.path = self.root + f'/{self.name}_{self.keyword}.csv'
+        self.path = self.root + f'/{self.name}/{self.name}_{self.keyword}.csv'
 
         df = pd.DataFrame({'title': self.titles,
                            'text': self.texts,
@@ -301,6 +387,9 @@ class SearchEngine(object):
         print(f'Saved to {self.path}', flush=True)
 
     def go(self):
+        '''
+        the main function to run the whole process to get the news of the keyword from the media
+        '''
         self.get_all_urls()
         self.num = len(self.urls)
         self.parse()
@@ -308,6 +397,9 @@ class SearchEngine(object):
         return None
 
     def init(self):
+        '''
+        initialize the parameters for another keyword or another media
+        '''
         self.count1 = 0
         self.count2 = 0
         self.count3 = 0
@@ -318,9 +410,13 @@ class SearchEngine(object):
         self.texts = []
         self.publish_dates = []
         self.page = self.startpage
+        self.set_method()
         gc.collect()
 
     def auto(self, medias, keywords):
+        '''
+        automatically get the news of the keywords from the medias
+        '''
         print(f'Reminder: you can only stop this process by restarting the kernel, '
               f'or double click the stop button in some cases', flush=True)
 
@@ -337,11 +433,22 @@ class SearchEngine(object):
                 print('\n', flush=True)
 
 class News(Article):
+    '''
+    the class to parse the news from the url to get the title, text and publish date
+    it inherits the class Article from newspaper3k
+
+    Parameters
+    ----------
+    url: str, the url of the news
+    publish_date: str, the published date of the news
+    title: str, the title of the news
+    text: str, the body text of the news
+
+    '''
     def __init__(self, url):
         super().__init__(url)
         self.download()
         self.parse()
-        self.loc = {'nytimes': ['section', 'meteredContent css-1r7ky0e']}
         try:
             self.publish_date = self.publish_date.strftime('%Y-%m-%d')
         except:
@@ -350,10 +457,22 @@ class News(Article):
             self.text = 'N/A'
         if not self.title:
             self.title = 'N/A'
-        self.generator = None
-        self.sentiment = None
 
 class Word_Cloud(object):
+    '''
+    the class to generate the word cloud of the news titles and texts
+    from given keywords and medias
+
+    Parameters
+    ----------
+    medias: list, the list of the medias to get the news
+    keywords: list, the list of the keywords to get the news
+    root: str, the root directory to save the results
+    limit: int, the maximum number of the news to use
+    custom_stopwords: list, the list of the custom stopwords to remove from the word cloud
+    titles: list, the list of the titles of the word cloud
+    WC: WordCloud, the word cloud object
+    '''
     def __init__(self,
                  medias=['CNN'],
                  keywords=['gun'],
@@ -376,10 +495,16 @@ class Word_Cloud(object):
                             max_font_size=300)
 
     def load_data(self, i):
-        return pd.read_csv(f'{os.path.join(self.root, self.titles[i].split("_")[0], self.titles[i])}.csv')\
+        '''
+        load the data from the csv file according to the title
+        '''
+        return pd.read_csv(f'{os.path.join(self.root, self.titles[i].split("_")[0], self.titles[i])}.csv', index_col=0)\
             .drop_duplicates().dropna()
 
     def show(self):
+        '''
+        show and save the word cloud of the news titles and texts
+        '''
         print('This may take a while has high demand on RAM', flush=True)
         for id, title in enumerate(self.titles):
             print(f'Processing {id+1}/{len(self.titles)}', flush=True)
@@ -404,4 +529,3 @@ class Word_Cloud(object):
             plt.close()
             del result
             gc.collect()
-        return None
