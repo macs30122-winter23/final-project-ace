@@ -404,3 +404,4 @@ class Word_Cloud(object):
             plt.close()
             del result
             gc.collect()
+        return None
