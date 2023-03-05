@@ -512,7 +512,7 @@ class Word_Cloud(object):
         load the data from the csv file according to the title
         and drop the duplicate and na rows
         '''
-        return pd.read_csv(f'{os.path.join(self.root, self.titles[i].split("_")[0], self.titles[i])}.csv', index_col=0)\
+        return pd.read_csv(f'{os.path.join(self.root, self.titles[i].split("_")[0], self.titles[i])}.csv')\
             .drop_duplicates().dropna()
 
     def show(self):
