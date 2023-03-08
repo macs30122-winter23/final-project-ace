@@ -72,3 +72,5 @@ Zejian Lyu: W2Vec Model, Aligning, and Final Analysis
 
 #### Links：
 Doc Link： https://docs.google.com/document/d/1m3is2uHfyMp0Rep0HLwdw_JuZm7M5Naud1zQ9yV0lyk/edit
+Video Link: https://drive.google.com/file/d/1g8Q3KgfgfY0hwcSTBLWM_dYveRAelmLI/view?usp=sharing
+Slides Link: https://docs.google.com/presentation/d/1PArBSliWCbsKzLkYGCtOiHncNxte7e2lPft14J0CvNk/edit?usp=sharing
