@@ -49,7 +49,7 @@ newspaper3k==0.2.8
 ## Navigation:
 You can use this repo to replicate our research and modify it to similar research.
 
-Our whole analysis pipeline can be finished on our demo_config.ipynb. However, for the consideration of time and computation resource, we strongly recommend you to run it on cobal or other service platform.
+Our whole analysis pipeline can be finished on our demo_config.ipynb. However, for the consideration of time and computation resource, we strongly recommend you to run it on colab or other service platform.
 
 To clean the news data under certain topic, you can run the cells under "Data Collection & Cleaning".
 You can follow the instruction and configure kargs_1 to specify the searching
