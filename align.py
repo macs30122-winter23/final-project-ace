@@ -1,11 +1,13 @@
+#
+
 import os
 from abc import ABC
+from collections import Counter
+
+import gensim
 import numpy as np
 import pandas as pd
-from collections import  Counter
-
 import scipy
-import gensim
 from nltk.tokenize import sent_tokenize
 from sklearn.cross_decomposition import CCA
 from sklearn.metrics.pairwise import cosine_similarity
@@ -163,11 +165,15 @@ def get_svd_aligner(model_a, model_b, anchorlist):
     aligner.set_params(T)
     return aligner
 
+
 def JS_divergence(p, q):
     M = (p + q) / 2
     return 0.5 * scipy.stats.entropy(p, M, base=2) + 0.5 * scipy.stats.entropy(q, M, base=2)
 
-def research_topic(keywords,t_align,forward_cnn,forward_nypost,model_general,model_cnn,model_nypost):
+
+def research_topic(keywords, t_align, forward_cnn, forward_nypost, model_general, model_cnn, model_nypost):
+
+    # Gether the articles from topic-specified files.
     cnn_path = f"CNN_{keywords}"
     for f_name in os.listdir("./data/CNN"):
         if f_name.startswith(cnn_path):
@@ -180,6 +186,8 @@ def research_topic(keywords,t_align,forward_cnn,forward_nypost,model_general,mod
             break
     nypost_file = open(os.path.join("./data/nypost", f_name), 'r')
 
+    # Count the content cluster attrbution of each word, and generate the articles' coverage
+    # representation vector, by proportion of each content cluster with the articles.
     word_intersec = []
     t_vec_cnn = np.zeros(300)
     df = pd.read_csv(cnn_file)
@@ -210,10 +218,12 @@ def research_topic(keywords,t_align,forward_cnn,forward_nypost,model_general,mod
                     all_nypost += hist[k]
                     t_vec_nypost[num] += hist[k]
     t_vec_nypost /= all_nypost
-
+    # Calculate their variance by two measures. It turns out that the JS works better than cosine
+    # similarity, for it can distinguish words better.
     topic_js = JS_divergence(t_vec_nypost, t_vec_cnn)
     topic_cos = cosine_similarity(np.array(t_vec_nypost).reshape([1, -1]), np.array(t_vec_cnn).reshape([1, -1]))
 
+    # Calculate the average cosine similarity of shared words by cnn embedding and nypost embedding.
     dis = []
     for wd in word_intersec:
         if wd in model_general.wv.key_to_index and wd in model_cnn.wv.key_to_index:
