@@ -18,7 +18,7 @@ have low content diversity, even though higher than war topics, and high ideolog
 differences.
 
 ## Data Sources:
-CNN: https://search.api.cnn.com/
+CNN: https://www.cnn.com/
 
 Nypost: https://nypost.com/
 
